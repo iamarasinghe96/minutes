@@ -9,7 +9,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 app.use(express.json());
 
 // In-memory session store: sessionId -> { data, clients }
@@ -38,7 +38,7 @@ app.get('/api/session/:id', (req, res) => {
 
 // Serve logo as base64 data URI so it can be embedded in Outlook email
 app.get('/api/logo', (req, res) => {
-  const logoDir = path.join(__dirname, 'public', 'assets', 'logo');
+  const logoDir = path.join(__dirname, 'assets', 'logo');
   const exts = ['png', 'jpg', 'jpeg', 'gif', 'svg'];
 
   for (const ext of exts) {

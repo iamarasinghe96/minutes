@@ -39,20 +39,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Populate Gemini prompt in modal
   document.getElementById('promptText').textContent = GEMINI_PROMPT;
 
-  // Load logo dynamically (works for any image extension)
+  // Load logo: try /api/logo (Node server, returns base64 for Outlook embedding),
+  // then fall back to static file paths for GitHub Pages / static hosting.
+  function setLogoSrc(src) {
+    document.querySelectorAll('.header-logo, .mm-logo').forEach(img => {
+      img.src = src;
+      img.style.display = '';
+    });
+  }
+  function tryStaticLogo() {
+    const exts = ['png', 'jpg', 'jpeg', 'svg', 'gif'];
+    let i = 0;
+    function next() {
+      if (i >= exts.length) return;
+      const ext = exts[i++];
+      const t = new Image();
+      t.onload = () => setLogoSrc(`assets/logo/logo.${ext}`);
+      t.onerror = next;
+      t.src = `assets/logo/logo.${ext}`;
+    }
+    next();
+  }
   try {
     const res = await fetch('/api/logo');
     if (res.ok) {
       const { dataUri } = await res.json();
-      document.querySelectorAll('.header-logo, .mm-logo').forEach(img => {
-        img.src = dataUri;
-        img.style.display = '';
-      });
-      document.querySelectorAll('.mm-logo-row').forEach(el => {
-        el.style.display = '';
-      });
+      setLogoSrc(dataUri);
+    } else {
+      tryStaticLogo();
     }
-  } catch { /* no logo */ }
+  } catch { tryStaticLogo(); }
 
   // Initialise 3 blank follow-up rows
   resetFollowupRows(3);
