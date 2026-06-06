@@ -293,10 +293,16 @@ body {
 }
 
 /* Follow-up table */
+.mm-followup-wrap {
+  margin: 0 14px 14px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
 .mm-followup {
   width: 100%;
   border-collapse: collapse;
-  border-top: 1px solid var(--border);
 }
 
 .mm-followup thead th {
@@ -317,7 +323,7 @@ body {
   font-family: 'Calibri', Arial, sans-serif;
   font-size: 14px;
 }
-.mm-followup td:focus { background: #fffde7; }
+.mm-followup td:focus { background: #eef4ff; }
 .mm-followup td:empty::before {
   content: '\00a0';
 }
