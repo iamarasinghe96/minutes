@@ -22,15 +22,11 @@
     <!-- ── STEP 1: Paste Transcription → AI Extract ── -->
     <section class="card" id="inputSection">
       <div class="card-header">
-        <h2>Step 1 &mdash; Paste Meeting Transcription</h2>
+        <h2>Step 1 &mdash; Extract from Transcription</h2>
       </div>
-      <textarea id="transcriptionInput"
-        placeholder="Paste your meeting transcription or notes here, then click Extract…"
-        rows="8"
-        spellcheck="false"></textarea>
-      <div class="input-actions">
-        <button class="btn-primary" id="extractBtn" onclick="extractMinutes()">&#10027; Extract with AI</button>
-        <button class="btn-ghost" onclick="document.getElementById('transcriptionInput').value=''">Clear</button>
+      <div class="input-actions" style="padding:20px 18px;">
+        <button class="btn-primary" id="extractBtn" onclick="pasteAndExtract()">&#128203; Paste &amp; Extract with AI</button>
+        <span class="extract-hint">Copy your meeting transcription first, then click this button.</span>
       </div>
     </section>
 

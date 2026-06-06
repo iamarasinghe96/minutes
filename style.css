@@ -2,16 +2,18 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --primary:      #2B6B38;
-  --primary-dark: #1E4D28;
-  --primary-hover:#348041;
+  --primary:      #28428D;
+  --primary-dark: #142B70;
+  --primary-hover:#3451A0;
+  --accent:       #61E786;
+  --accent-bg:    #D8FAD5;
   --border:     #cccccc;
   --border-dark:#999999;
-  --bg:         #f2f3f5;
+  --bg:         #f0f4f8;
   --card:       #ffffff;
   --text:       #1a1a1a;
   --muted:      #666666;
-  --radius:     6px;
+  --radius:     10px;
   --font:       'Calibri', 'Segoe UI', Arial, sans-serif;
 }
 
@@ -25,12 +27,12 @@ body {
 /* ─── App Header ───────────────────────────────────────────── */
 .app-header {
   background: #fff;
-  border-bottom: 3px solid var(--primary);
+  border-bottom: 4px solid var(--accent);
   padding: 12px 24px;
   display: flex;
   align-items: center;
   gap: 14px;
-  box-shadow: 0 2px 6px rgba(0,0,0,.10);
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
 }
 
 .header-logo {
@@ -121,8 +123,15 @@ body {
 .input-actions {
   padding: 10px 18px;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.extract-hint {
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
 }
 
 /* ─── Buttons ──────────────────────────────────────────────── */
@@ -186,9 +195,12 @@ body {
 .minutes-wrapper {
   margin: 18px;
   border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
   font-family: 'Calibri', Arial, sans-serif;
   font-size: 14px;
   background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
 }
 
 /* Logo row */
@@ -225,7 +237,7 @@ body {
   padding: 8px 12px;
   font-weight: 600;
   border-right: 1px solid var(--border);
-  background: #fafafa;
+  background: var(--accent-bg);
 }
 
 .mm-value {

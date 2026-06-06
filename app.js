@@ -39,15 +39,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch { tryStaticLogo(); }
 });
 
-// ── AI Extraction ───────────────────────────────────────────────
-async function extractMinutes() {
-  const transcription = document.getElementById('transcriptionInput').value.trim();
-  if (!transcription) { showToast('Paste a meeting transcription first.', 'error'); return; }
-
+// ── AI Extraction (reads from clipboard) ────────────────────────
+async function pasteAndExtract() {
   const btn = document.getElementById('extractBtn');
   btn.disabled = true;
-  btn.textContent = 'Extracting…';
+  btn.textContent = 'Reading clipboard…';
 
+  let transcription = '';
+  try {
+    transcription = await navigator.clipboard.readText();
+  } catch {
+    // Clipboard API unavailable — fall back to a prompt
+    transcription = window.prompt('Clipboard access was blocked.\nPaste your transcription here:') || '';
+  }
+
+  if (!transcription.trim()) {
+    showToast('Nothing found in clipboard. Copy your transcription first.', 'error');
+    btn.disabled = false;
+    btn.textContent = '📋 Paste & Extract with AI';
+    return;
+  }
+
+  btn.textContent = 'Extracting…';
   try {
     const res = await fetch('/api/extract', {
       method: 'POST',
@@ -58,11 +71,11 @@ async function extractMinutes() {
     if (!res.ok) { showToast(body.error || 'Extraction failed.', 'error'); return; }
     populateForm(body.data);
     showToast('Meeting minutes populated!', 'success');
-  } catch (err) {
+  } catch {
     showToast('Could not reach server. Is it running?', 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = '✧ Extract with AI';
+    btn.textContent = '📋 Paste & Extract with AI';
   }
 }
 
@@ -192,10 +205,10 @@ async function sendEmail() {
 
 // ── Build email-compatible HTML ─────────────────────────────────
 function buildEmailHTML(data, logoHtml) {
-  const GREEN  = '#2B6B38';
+  const BLUE   = '#28428D';
   const BORDER = '1px solid #CCCCCC';
   const CELL   = `border:${BORDER};padding:8px 12px;font-family:Calibri,Arial,sans-serif;font-size:14px;`;
-  const LABEL  = `${CELL}width:175px;font-weight:600;vertical-align:top;background:#F4FAF5;`;
+  const LABEL  = `${CELL}width:175px;font-weight:600;vertical-align:top;background:#D8FAD5;`;
 
   const nl2br = txt => esc(txt).replace(/\n/g, '<br>');
 
@@ -215,8 +228,8 @@ function buildEmailHTML(data, logoHtml) {
     ${logoHtml}
     <!-- Title -->
     <tr>
-      <td colspan="2" bgcolor="${GREEN}"
-          style="background-color:${GREEN};color:#FFFFFF;text-align:center;
+      <td colspan="2" bgcolor="${BLUE}"
+          style="background-color:${BLUE};color:#FFFFFF;text-align:center;
                  padding:10px;font-size:18px;font-weight:bold;
                  font-family:Calibri,Arial,sans-serif;">
         Meeting Minutes
@@ -256,16 +269,16 @@ function buildEmailHTML(data, logoHtml) {
                style="border-collapse:collapse;width:100%;">
           <thead>
             <tr>
-              <th bgcolor="${GREEN}"
-                  style="background-color:${GREEN};color:#FFFFFF;padding:8px 12px;
+              <th bgcolor="${BLUE}"
+                  style="background-color:${BLUE};color:#FFFFFF;padding:8px 12px;
                          text-align:center;font-family:Calibri,Arial,sans-serif;
                          font-size:14px;font-weight:bold;width:34%;">Point</th>
-              <th bgcolor="${GREEN}"
-                  style="background-color:${GREEN};color:#FFFFFF;padding:8px 12px;
+              <th bgcolor="${BLUE}"
+                  style="background-color:${BLUE};color:#FFFFFF;padding:8px 12px;
                          text-align:center;font-family:Calibri,Arial,sans-serif;
                          font-size:14px;font-weight:bold;width:33%;">Person</th>
-              <th bgcolor="${GREEN}"
-                  style="background-color:${GREEN};color:#FFFFFF;padding:8px 12px;
+              <th bgcolor="${BLUE}"
+                  style="background-color:${BLUE};color:#FFFFFF;padding:8px 12px;
                          text-align:center;font-family:Calibri,Arial,sans-serif;
                          font-size:14px;font-weight:bold;width:33%;">Deadline</th>
             </tr>
