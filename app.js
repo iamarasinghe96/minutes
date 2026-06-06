@@ -1,46 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════
-   Meeting Minutes Tool – Frontend Logic
+   AlburyCity Council — Meeting Minutes Tool — Frontend Logic
    ═══════════════════════════════════════════════════════════════ */
-
-// ── State ───────────────────────────────────────────────────────
-let sessionId  = null;
-let ws         = null;
-let isSyncing  = false;   // prevent echo when we receive remote updates
-let syncTimer  = null;    // debounce timer for sync
-
-// ── Gemini prompt template ──────────────────────────────────────
-const GEMINI_PROMPT = `You are a professional meeting minutes formatter.
-Analyse the following meeting transcription and extract key information
-into this EXACT JSON format.
-
-OUTPUT ONLY THE JSON — no markdown, no code fences, no explanation.
-
-{
-  "meeting_topic": "Brief descriptive title",
-  "date": "DD/MM/YYYY (if mentioned, otherwise leave blank)",
-  "host": "Name of the meeting host or chairperson",
-  "participants": "Comma-separated list of all participants",
-  "preface": "1-2 sentences about the purpose and context of the meeting",
-  "discussion_points": "Key topics discussed, each on a new line starting with • ",
-  "follow_up_actions": [
-    {
-      "point": "Specific action item description",
-      "person": "Person responsible",
-      "deadline": "Deadline or timeframe (e.g. 15/04/2025, Next meeting, ASAP)"
-    }
-  ]
-}
-
-Meeting Transcription:
-[PASTE YOUR TRANSCRIPTION HERE]`;
 
 // ── Bootstrap ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  // Populate Gemini prompt in modal
-  document.getElementById('promptText').textContent = GEMINI_PROMPT;
+  // Initialise 3 blank follow-up rows
+  resetFollowupRows(3);
 
-  // Load logo: try /api/logo (Node server, returns base64 for Outlook embedding),
-  // then fall back to static file paths for GitHub Pages / static hosting.
+  // Load logo: try /api/logo (returns base64 for email embedding),
+  // then fall back to static file paths.
   function setLogoSrc(src) {
     document.querySelectorAll('.header-logo, .mm-logo').forEach(img => {
       img.src = src;
@@ -69,98 +37,32 @@ document.addEventListener('DOMContentLoaded', async () => {
       tryStaticLogo();
     }
   } catch { tryStaticLogo(); }
-
-  // Initialise 3 blank follow-up rows
-  resetFollowupRows(3);
-
-  // Resolve session
-  const params = new URLSearchParams(window.location.search);
-  let sid = params.get('session');
-
-  if (sid) {
-    sessionId = sid.toUpperCase();
-    // Fetch any existing data from the server
-    try {
-      const res  = await fetch(`/api/session/${sessionId}`);
-      const body = await res.json();
-      if (body.data) {
-        isSyncing = true;
-        populateForm(body.data);
-        isSyncing = false;
-      }
-    } catch { /* server unreachable; work offline */ }
-  } else {
-    try {
-      const res  = await fetch('/api/session', { method: 'POST' });
-      const body = await res.json();
-      sessionId  = body.sessionId;
-      window.history.replaceState({}, '', `?session=${sessionId}`);
-    } catch {
-      // Fallback: local-only random ID
-      sessionId = Math.random().toString(36).slice(2, 8).toUpperCase();
-      window.history.replaceState({}, '', `?session=${sessionId}`);
-    }
-  }
-
-  document.getElementById('sessionId').textContent = sessionId;
-  connectWebSocket();
 });
 
-// ── WebSocket ───────────────────────────────────────────────────
-function connectWebSocket() {
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl    = `${protocol}//${location.host}/ws?session=${sessionId}`;
+// ── AI Extraction ───────────────────────────────────────────────
+async function extractMinutes() {
+  const transcription = document.getElementById('transcriptionInput').value.trim();
+  if (!transcription) { showToast('Paste a meeting transcription first.', 'error'); return; }
+
+  const btn = document.getElementById('extractBtn');
+  btn.disabled = true;
+  btn.textContent = 'Extracting…';
 
   try {
-    ws = new WebSocket(wsUrl);
-  } catch {
-    setSyncStatus('offline');
-    setTimeout(connectWebSocket, 5000);
-    return;
-  }
-
-  ws.onopen = () => setSyncStatus('online');
-
-  ws.onmessage = (e) => {
-    try {
-      const msg = JSON.parse(e.data);
-      if (msg.type === 'sync') {
-        isSyncing = true;
-        populateForm(msg.data);
-        isSyncing = false;
-      }
-    } catch { /* ignore */ }
-  };
-
-  ws.onclose = () => {
-    setSyncStatus('offline');
-    setTimeout(connectWebSocket, 4000);
-  };
-
-  ws.onerror = () => setSyncStatus('offline');
-}
-
-function setSyncStatus(state) {
-  const dot  = document.getElementById('syncDot');
-  const text = document.getElementById('syncText');
-  dot.className = `sync-dot ${state}`;
-  const labels = { online: 'Synced', offline: 'Disconnected', waiting: 'Syncing…' };
-  text.textContent = labels[state] || state;
-}
-
-// ── Sync ────────────────────────────────────────────────────────
-// Call this whenever a field changes; debounces 300 ms
-function scheduleSync() {
-  if (isSyncing) return;
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(doSync, 300);
-}
-
-function doSync() {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    setSyncStatus('waiting');
-    ws.send(JSON.stringify({ type: 'update', data: collectFormData() }));
-    setSyncStatus('online');
+    const res = await fetch('/api/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcription }),
+    });
+    const body = await res.json();
+    if (!res.ok) { showToast(body.error || 'Extraction failed.', 'error'); return; }
+    populateForm(body.data);
+    showToast('Meeting minutes populated!', 'success');
+  } catch (err) {
+    showToast('Could not reach server. Is it running?', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✧ Extract with AI';
   }
 }
 
@@ -206,7 +108,6 @@ function populateForm(data) {
 
   if (Array.isArray(data.follow_up_actions)) {
     const rows = [...data.follow_up_actions];
-    // Ensure at least 3 rows
     while (rows.length < 3) rows.push({ point: '', person: '', deadline: '' });
     renderFollowupRows(rows);
   }
@@ -231,7 +132,6 @@ function makeRow({ point = '', person = '', deadline = '' } = {}) {
     const td = document.createElement('td');
     td.contentEditable = 'true';
     td.innerText = val;
-    td.addEventListener('input', scheduleSync);
     tr.appendChild(td);
   });
   return tr;
@@ -239,42 +139,20 @@ function makeRow({ point = '', person = '', deadline = '' } = {}) {
 
 function addRow() {
   document.getElementById('followupBody').appendChild(makeRow());
-  scheduleSync();
 }
 
 function removeLastRow() {
   const tbody = document.getElementById('followupBody');
-  if (tbody.rows.length > 1) {
-    tbody.deleteRow(tbody.rows.length - 1);
-    scheduleSync();
-  }
+  if (tbody.rows.length > 1) tbody.deleteRow(tbody.rows.length - 1);
 }
 
-// ── Parse Gemini output ─────────────────────────────────────────
-function parseGeminiOutput() {
-  const raw = document.getElementById('geminiInput').value.trim();
-  if (!raw) { showToast('Paste the Gemini JSON output first.', 'error'); return; }
-
-  let data;
-  try {
-    // Strip optional markdown code fences (```json ... ```)
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    data = JSON.parse(cleaned);
-  } catch {
-    showToast('Could not parse JSON. Make sure Gemini replied with pure JSON.', 'error');
-    return;
-  }
-
-  populateForm(data);
-  scheduleSync();
-  showToast('Meeting minutes populated!', 'success');
-}
-
-// ── Copy for Outlook ────────────────────────────────────────────
-async function copyForOutlook() {
+// ── Send via email ──────────────────────────────────────────────
+async function sendEmail() {
   const data = collectFormData();
+  const btn  = document.getElementById('emailBtn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
 
-  // Try to get logo as embedded base64 (so it shows in Outlook)
   let logoHtml = '';
   try {
     const res = await fetch('/api/logo');
@@ -283,36 +161,44 @@ async function copyForOutlook() {
       logoHtml = `
         <tr>
           <td colspan="2" style="padding:8px 12px 4px;">
-            <img src="${dataUri}" height="52" style="height:52px;display:block;" alt="Logo">
+            <img src="${dataUri}" height="52" style="height:52px;display:block;" alt="AlburyCity Council Logo">
           </td>
         </tr>`;
     }
   } catch { /* no logo, fine */ }
 
-  const html = buildOutlookHTML(data, logoHtml);
+  const html    = buildEmailHTML(data, logoHtml);
+  const subject = `Meeting Minutes — ${data.meeting_topic || 'AlburyCity Council'} — ${data.date || ''}`.replace(/— $/, '').trim();
 
   try {
-    await navigator.clipboard.write([
-      new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) }),
-    ]);
-    showToast('Copied! Paste into your Outlook email.', 'success');
+    const res  = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html, subject }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      showToast(body.error || 'Failed to send email.', 'error');
+    } else {
+      showToast('Email sent to indika.arasinghe@alburycity.nsw.gov.au', 'success');
+    }
   } catch {
-    // Fallback: show a modal with the raw HTML for manual copy
-    fallbackCopy(html);
+    showToast('Could not reach server. Is it running?', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✉ Send to Office Email';
   }
 }
 
-// ── Build Outlook-compatible HTML ───────────────────────────────
-function buildOutlookHTML(data, logoHtml) {
-  const RED    = '#B20000';
+// ── Build email-compatible HTML ─────────────────────────────────
+function buildEmailHTML(data, logoHtml) {
+  const GREEN  = '#2B6B38';
   const BORDER = '1px solid #CCCCCC';
   const CELL   = `border:${BORDER};padding:8px 12px;font-family:Calibri,Arial,sans-serif;font-size:14px;`;
-  const LABEL  = `${CELL}width:175px;font-weight:600;vertical-align:top;background:#FAFAFA;`;
+  const LABEL  = `${CELL}width:175px;font-weight:600;vertical-align:top;background:#F4FAF5;`;
 
-  // Preface / discussion: keep plain text, convert newlines to <br>
   const nl2br = txt => esc(txt).replace(/\n/g, '<br>');
 
-  // Follow-up rows; always at least 3
   const actions = [...(data.follow_up_actions || [])];
   while (actions.length < 3) actions.push({ point: '', person: '', deadline: '' });
   const fuRows = actions.map(r => `
@@ -329,8 +215,8 @@ function buildOutlookHTML(data, logoHtml) {
     ${logoHtml}
     <!-- Title -->
     <tr>
-      <td colspan="2" bgcolor="${RED}"
-          style="background-color:${RED};color:#FFFFFF;text-align:center;
+      <td colspan="2" bgcolor="${GREEN}"
+          style="background-color:${GREEN};color:#FFFFFF;text-align:center;
                  padding:10px;font-size:18px;font-weight:bold;
                  font-family:Calibri,Arial,sans-serif;">
         Meeting Minutes
@@ -370,16 +256,16 @@ function buildOutlookHTML(data, logoHtml) {
                style="border-collapse:collapse;width:100%;">
           <thead>
             <tr>
-              <th bgcolor="${RED}"
-                  style="background-color:${RED};color:#FFFFFF;padding:8px 12px;
+              <th bgcolor="${GREEN}"
+                  style="background-color:${GREEN};color:#FFFFFF;padding:8px 12px;
                          text-align:center;font-family:Calibri,Arial,sans-serif;
                          font-size:14px;font-weight:bold;width:34%;">Point</th>
-              <th bgcolor="${RED}"
-                  style="background-color:${RED};color:#FFFFFF;padding:8px 12px;
+              <th bgcolor="${GREEN}"
+                  style="background-color:${GREEN};color:#FFFFFF;padding:8px 12px;
                          text-align:center;font-family:Calibri,Arial,sans-serif;
                          font-size:14px;font-weight:bold;width:33%;">Person</th>
-              <th bgcolor="${RED}"
-                  style="background-color:${RED};color:#FFFFFF;padding:8px 12px;
+              <th bgcolor="${GREEN}"
+                  style="background-color:${GREEN};color:#FFFFFF;padding:8px 12px;
                          text-align:center;font-family:Calibri,Arial,sans-serif;
                          font-size:14px;font-weight:bold;width:33%;">Deadline</th>
             </tr>
@@ -392,7 +278,7 @@ function buildOutlookHTML(data, logoHtml) {
     <tr>
       <td colspan="2"
           style="${CELL}text-align:center;font-style:italic;color:#555555;font-size:13px;">
-        ~~~Minutes prepared by Indika~~~
+        ~~~Minutes prepared by Indika — AlburyCity Council~~~
       </td>
     </tr>
   </tbody>
@@ -407,32 +293,6 @@ function esc(str = '') {
     .replace(/"/g, '&quot;');
 }
 
-// ── Fallback HTML copy (older browsers / HTTP) ──────────────────
-function fallbackCopy(html) {
-  // Insert a temporary contenteditable div, select it, execCommand copy
-  const div = document.createElement('div');
-  div.contentEditable = 'true';
-  div.style.cssText   = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
-  div.innerHTML       = html;
-  document.body.appendChild(div);
-
-  const range = document.createRange();
-  range.selectNodeContents(div);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-
-  try {
-    document.execCommand('copy');
-    showToast('Copied! Paste into your Outlook email.', 'success');
-  } catch {
-    showToast('Auto-copy failed. Please select and copy the table manually.', 'error');
-  }
-
-  sel.removeAllRanges();
-  document.body.removeChild(div);
-}
-
 // ── Clear ───────────────────────────────────────────────────────
 function clearAll() {
   ['fTopic','fDate','fHost','fParticipants'].forEach(id => {
@@ -442,29 +302,6 @@ function clearAll() {
     document.getElementById(id).innerText = '';
   });
   resetFollowupRows(3);
-  scheduleSync();
-}
-
-// ── Session link ────────────────────────────────────────────────
-function copySessionLink() {
-  const url = `${location.origin}${location.pathname}?session=${sessionId}`;
-  navigator.clipboard.writeText(url)
-    .then(() => showToast('Link copied! Open it on any device.', 'success'))
-    .catch(() => showToast(`Share this URL: ${url}`, 'error'));
-}
-
-// ── Gemini prompt modal ─────────────────────────────────────────
-function openPromptModal()  { document.getElementById('promptModal').classList.remove('hidden'); }
-function closePromptModal(e) {
-  if (!e || e.target === document.getElementById('promptModal') || !e.target) {
-    document.getElementById('promptModal').classList.add('hidden');
-  }
-}
-
-function copyPrompt() {
-  navigator.clipboard.writeText(GEMINI_PROMPT)
-    .then(() => showToast('Prompt copied!', 'success'))
-    .catch(() => showToast('Could not copy automatically.', 'error'));
 }
 
 // ── Toast notifications ─────────────────────────────────────────

@@ -2,9 +2,9 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --red:        #B20000;
-  --red-dark:   #8B0000;
-  --red-hover:  #cc0000;
+  --primary:      #2B6B38;
+  --primary-dark: #1E4D28;
+  --primary-hover:#348041;
   --border:     #cccccc;
   --border-dark:#999999;
   --bg:         #f2f3f5;
@@ -25,7 +25,7 @@ body {
 /* ─── App Header ───────────────────────────────────────────── */
 .app-header {
   background: #fff;
-  border-bottom: 3px solid var(--red);
+  border-bottom: 3px solid var(--primary);
   padding: 12px 24px;
   display: flex;
   align-items: center;
@@ -42,7 +42,7 @@ body {
 .header-title h1 {
   font-size: 20px;
   font-weight: 700;
-  color: var(--red-dark);
+  color: var(--primary-dark);
   line-height: 1.2;
 }
 
@@ -52,60 +52,14 @@ body {
   letter-spacing: .04em;
 }
 
-/* ─── Session Bar ──────────────────────────────────────────── */
-.session-bar {
-  background: #1e1e2e;
-  color: #cdd6f4;
-  padding: 7px 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* ─── Status Bar ───────────────────────────────────────────── */
+.status-bar {
+  background: var(--primary-dark);
+  color: #e8f5e9;
+  padding: 6px 24px;
   font-size: 13px;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.session-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-
-.session-label { color: #a6adc8; }
-
-.session-bar code {
-  background: #313244;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 14px;
-  letter-spacing: .1em;
-  color: #89b4fa;
-}
-
-.btn-link {
-  background: none;
-  border: 1px solid #45475a;
-  color: #cdd6f4;
-  padding: 3px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: border-color .2s, color .2s;
-}
-.btn-link:hover { border-color: #89b4fa; color: #89b4fa; }
-
-.session-right { display: flex; align-items: center; gap: 6px; }
-
-.sync-dot {
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  display: inline-block;
-  transition: background .4s;
-}
-.sync-dot.online  { background: #a6e3a1; box-shadow: 0 0 6px #a6e3a1; }
-.sync-dot.offline { background: #f38ba8; }
-.sync-dot.waiting { background: #fab387; animation: pulse 1.2s infinite; }
-
-@keyframes pulse {
-  0%,100% { opacity: 1; }
-  50%      { opacity: .4; }
+  text-align: center;
+  letter-spacing: .02em;
 }
 
 /* ─── Layout ───────────────────────────────────────────────── */
@@ -127,7 +81,7 @@ body {
 }
 
 .card-header {
-  background: var(--red-dark);
+  background: var(--primary-dark);
   color: #fff;
   padding: 10px 18px;
   display: flex;
@@ -161,7 +115,7 @@ body {
 }
 #inputSection textarea:focus {
   background: #fff;
-  border-bottom-color: var(--red);
+  border-bottom-color: var(--primary);
 }
 
 .input-actions {
@@ -173,7 +127,7 @@ body {
 
 /* ─── Buttons ──────────────────────────────────────────────── */
 .btn-primary {
-  background: var(--red);
+  background: var(--primary);
   color: #fff;
   border: none;
   padding: 7px 18px;
@@ -184,7 +138,8 @@ body {
   font-family: var(--font);
   transition: background .2s;
 }
-.btn-primary:hover { background: var(--red-hover); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:disabled { opacity: .6; cursor: not-allowed; }
 
 .btn-outline {
   background: transparent;
@@ -214,7 +169,7 @@ body {
 
 .btn-copy {
   background: #fff;
-  color: var(--red-dark);
+  color: var(--primary-dark);
   border: none;
   padding: 6px 16px;
   border-radius: var(--radius);
@@ -225,6 +180,7 @@ body {
   transition: background .2s;
 }
 .btn-copy:hover { background: #f5f5f5; }
+.btn-copy:disabled { opacity: .6; cursor: not-allowed; }
 
 /* ─── Meeting Minutes preview wrapper ─────────────────────── */
 .minutes-wrapper {
@@ -248,7 +204,7 @@ body {
 
 /* Title banner */
 .mm-title {
-  background: var(--red);
+  background: var(--primary);
   color: #fff;
   text-align: center;
   padding: 10px;
@@ -316,7 +272,7 @@ body {
   white-space: pre-wrap;
 }
 .mm-editable:hover  { border-color: var(--border); }
-.mm-editable:focus  { border-color: var(--red); background: #fffde7; }
+.mm-editable:focus  { border-color: var(--primary); background: #fffde7; }
 .mm-editable:empty::before {
   content: attr(data-placeholder);
   color: #aaa;
@@ -332,7 +288,7 @@ body {
 }
 
 .mm-followup thead th {
-  background: var(--red);
+  background: var(--primary);
   color: #fff;
   padding: 8px 12px;
   text-align: center;
@@ -414,7 +370,7 @@ body {
 }
 
 .modal-header {
-  background: var(--red-dark);
+  background: var(--primary-dark);
   color: #fff;
   padding: 12px 18px;
   display: flex;

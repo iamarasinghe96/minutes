@@ -3,48 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meeting Minutes Tool</title>
+  <title>AlburyCity Council — Meeting Minutes</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <!-- App Header -->
   <header class="app-header">
-    <img src="assets/logo/logo.png" alt="Logo" class="header-logo" onerror="this.style.display='none'">
+    <img src="assets/logo/logo.png" alt="AlburyCity Council Logo" class="header-logo" onerror="this.style.display='none'">
     <div class="header-title">
-      <h1>Meeting Minutes Tool</h1>
-      <span>Prepare &bull; Sync &bull; Send</span>
+      <h1>Meeting Minutes</h1>
+      <span>AlburyCity Council</span>
     </div>
   </header>
 
-  <!-- Session Bar -->
-  <div class="session-bar">
-    <div class="session-left">
-      <span class="session-label">Session ID:</span>
-      <code id="sessionId">—</code>
-      <button class="btn-link" onclick="copySessionLink()" title="Copy shareable link">&#128279; Copy Link</button>
-    </div>
-    <div class="session-right">
-      <span id="syncDot" class="sync-dot offline"></span>
-      <span id="syncText">Connecting…</span>
-    </div>
-  </div>
-
   <main class="container">
 
-    <!-- ── STEP 1: Paste Gemini Output ── -->
+    <!-- ── STEP 1: Paste Transcription → AI Extract ── -->
     <section class="card" id="inputSection">
       <div class="card-header">
-        <h2>Step 1 &mdash; Paste Gemini Output</h2>
-        <button class="btn-outline" onclick="openPromptModal()">Get Gemini Prompt &#9432;</button>
+        <h2>Step 1 &mdash; Paste Meeting Transcription</h2>
       </div>
-      <textarea id="geminiInput"
-        placeholder='Paste the JSON from Gemini here, e.g.:&#10;{&#10;  "meeting_topic": "...",&#10;  "date": "...",&#10;  ...&#10;}'
-        rows="7"
+      <textarea id="transcriptionInput"
+        placeholder="Paste your meeting transcription or notes here, then click Extract…"
+        rows="8"
         spellcheck="false"></textarea>
       <div class="input-actions">
-        <button class="btn-primary" onclick="parseGeminiOutput()">&#10003; Parse &amp; Populate</button>
-        <button class="btn-ghost" onclick="document.getElementById('geminiInput').value=''">Clear</button>
+        <button class="btn-primary" id="extractBtn" onclick="extractMinutes()">&#10027; Extract with AI</button>
+        <button class="btn-ghost" onclick="document.getElementById('transcriptionInput').value=''">Clear</button>
       </div>
     </section>
 
@@ -53,7 +39,7 @@
       <div class="card-header">
         <h2>Step 2 &mdash; Review &amp; Edit</h2>
         <div class="card-header-actions">
-          <button class="btn-copy" onclick="copyForOutlook()">&#128203; Copy for Outlook</button>
+          <button class="btn-copy" id="emailBtn" onclick="sendEmail()">&#9993; Send to Office Email</button>
           <button class="btn-ghost" onclick="clearAll()">Clear All</button>
         </div>
       </div>
@@ -74,25 +60,25 @@
         <div class="mm-row">
           <div class="mm-label">Meeting Topic:</div>
           <div class="mm-value">
-            <input type="text" id="fTopic" placeholder="Enter meeting topic" oninput="scheduleSync()">
+            <input type="text" id="fTopic" placeholder="Enter meeting topic">
           </div>
         </div>
         <div class="mm-row">
           <div class="mm-label">Date:</div>
           <div class="mm-value">
-            <input type="text" id="fDate" placeholder="DD/MM/YYYY" oninput="scheduleSync()">
+            <input type="text" id="fDate" placeholder="DD/MM/YYYY">
           </div>
         </div>
         <div class="mm-row">
           <div class="mm-label">Host:</div>
           <div class="mm-value">
-            <input type="text" id="fHost" placeholder="Meeting host / chairperson" oninput="scheduleSync()">
+            <input type="text" id="fHost" placeholder="Meeting host / chairperson">
           </div>
         </div>
         <div class="mm-row">
           <div class="mm-label">Participants:</div>
           <div class="mm-value">
-            <input type="text" id="fParticipants" placeholder="Comma-separated list" oninput="scheduleSync()">
+            <input type="text" id="fParticipants" placeholder="Comma-separated list">
           </div>
         </div>
 
@@ -100,11 +86,11 @@
         <div class="mm-content">
           <div class="mm-content-label">Preface:</div>
           <div id="fPreface" class="mm-editable" contenteditable="true"
-               data-placeholder="Brief opening context or purpose…" oninput="scheduleSync()"></div>
+               data-placeholder="Brief opening context or purpose…"></div>
 
           <div class="mm-content-label" style="margin-top:14px;">Discussion Points:</div>
           <div id="fDiscussion" class="mm-editable" contenteditable="true"
-               data-placeholder="Key discussion points, one per line…" oninput="scheduleSync()"></div>
+               data-placeholder="Key discussion points, one per line…"></div>
 
           <div class="mm-content-label" style="margin-top:14px;">Follow up points:</div>
         </div>
@@ -124,7 +110,7 @@
         </table>
 
         <!-- Footer -->
-        <div class="mm-footer">~~~Minutes prepared by Indika~~~</div>
+        <div class="mm-footer">~~~Minutes prepared by Indika — AlburyCity Council~~~</div>
       </div>
 
       <!-- Table row controls -->
@@ -139,25 +125,6 @@
 
   <!-- ── Notification Toast ── -->
   <div id="toast" class="toast hidden"></div>
-
-  <!-- ── Gemini Prompt Modal ── -->
-  <div id="promptModal" class="modal-overlay hidden" onclick="closePromptModal(event)">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Gemini Prompt Template</h3>
-        <button class="modal-close" onclick="closePromptModal()">&times;</button>
-      </div>
-      <p class="modal-desc">
-        Copy this prompt, open Gemini, paste it <strong>followed by your meeting transcription</strong>,
-        then copy the JSON output back into Step 1.
-      </p>
-      <pre id="promptText" class="prompt-pre"></pre>
-      <div class="modal-actions">
-        <button class="btn-primary" onclick="copyPrompt()">&#128203; Copy Prompt</button>
-        <button class="btn-ghost" onclick="closePromptModal()">Close</button>
-      </div>
-    </div>
-  </div>
 
   <script src="app.js"></script>
 </body>
