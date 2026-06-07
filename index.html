@@ -26,6 +26,7 @@
       </div>
       <div class="input-actions" style="padding:20px 18px;">
         <button class="btn-primary" id="extractBtn" onclick="pasteAndExtract()">&#128203; Paste &amp; Extract with AI</button>
+        <button class="btn-ghost" onclick="openSettings()" title="Configure API key">&#9881; API Key</button>
         <span class="extract-hint">Copy your meeting transcription first, then click this button.</span>
       </div>
     </section>
@@ -35,7 +36,7 @@
       <div class="card-header">
         <h2>Step 2 &mdash; Review &amp; Edit</h2>
         <div class="card-header-actions">
-          <button class="btn-copy" id="emailBtn" onclick="sendEmail()">&#9993; Send to Office Email</button>
+          <button class="btn-copy" id="emailBtn" onclick="copyForOutlook()">&#128203; Copy for Outlook</button>
           <button class="btn-ghost" onclick="clearAll()">Clear All</button>
         </div>
       </div>
@@ -120,6 +121,27 @@
     </section>
 
   </main>
+
+  <!-- ── API Key Settings Modal ── -->
+  <div id="settingsModal" class="modal-overlay hidden" onclick="closeSettings(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Gemini API Key</h3>
+        <button class="modal-close" onclick="closeSettings()">&times;</button>
+      </div>
+      <p class="modal-desc">
+        Enter your Gemini API key. It is saved only in your browser (localStorage) and never sent anywhere except Google's API.
+      </p>
+      <div style="padding:0 18px 14px;">
+        <input type="password" id="apiKeyInput" placeholder="Paste your API key here…"
+               style="width:100%;padding:8px 12px;font-size:14px;border:1px solid #ccc;border-radius:6px;font-family:monospace;">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="saveApiKey()">Save</button>
+        <button class="btn-ghost" onclick="closeSettings()">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── Notification Toast ── -->
   <div id="toast" class="toast hidden"></div>

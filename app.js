@@ -2,41 +2,58 @@
    AlburyCity Council — Meeting Minutes Tool — Frontend Logic
    ═══════════════════════════════════════════════════════════════ */
 
+const GEMINI_URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=';
+
+function getApiKey() {
+  return localStorage.getItem('gemini_api_key') || '';
+}
+
+const GEMINI_PROMPT = `You are a professional meeting minutes formatter.
+Analyse the following meeting transcription and extract key information
+into this EXACT JSON format.
+
+OUTPUT ONLY THE JSON — no markdown, no code fences, no explanation.
+
+{
+  "meeting_topic": "Brief descriptive title",
+  "date": "DD/MM/YYYY (if mentioned, otherwise leave blank)",
+  "host": "Name of the meeting host or chairperson",
+  "participants": "Comma-separated list of all participants",
+  "preface": "1-2 sentences about the purpose and context of the meeting",
+  "discussion_points": "Key topics discussed, each on a new line starting with • ",
+  "follow_up_actions": [
+    {
+      "point": "Specific action item description",
+      "person": "Person responsible",
+      "deadline": "Deadline or timeframe (e.g. 15/04/2025, Next meeting, ASAP)"
+    }
+  ]
+}
+
+Meeting Transcription:
+`;
+
 // ── Bootstrap ───────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  // Initialise 3 blank follow-up rows
+document.addEventListener('DOMContentLoaded', () => {
   resetFollowupRows(3);
 
-  // Load logo: try /api/logo (returns base64 for email embedding),
-  // then fall back to static file paths.
-  function setLogoSrc(src) {
-    document.querySelectorAll('.header-logo, .mm-logo').forEach(img => {
-      img.src = src;
-      img.style.display = '';
-    });
+  // Try to load logo from static files
+  const exts = ['png', 'jpg', 'jpeg', 'svg', 'gif'];
+  let i = 0;
+  function tryNext() {
+    if (i >= exts.length) return;
+    const ext = exts[i++];
+    const t = new Image();
+    t.onload = () => {
+      document.querySelectorAll('.header-logo, .mm-logo').forEach(img => {
+        img.src = t.src;
+        img.style.display = '';
+      });
+    };
+    t.onerror = tryNext;
+    t.src = `assets/logo/logo.${ext}`;
   }
-  function tryStaticLogo() {
-    const exts = ['png', 'jpg', 'jpeg', 'svg', 'gif'];
-    let i = 0;
-    function next() {
-      if (i >= exts.length) return;
-      const ext = exts[i++];
-      const t = new Image();
-      t.onload = () => setLogoSrc(`assets/logo/logo.${ext}`);
-      t.onerror = next;
-      t.src = `assets/logo/logo.${ext}`;
-    }
-    next();
-  }
-  try {
-    const res = await fetch('/api/logo');
-    if (res.ok) {
-      const { dataUri } = await res.json();
-      setLogoSrc(dataUri);
-    } else {
-      tryStaticLogo();
-    }
-  } catch { tryStaticLogo(); }
+  tryNext();
 });
 
 // ── AI Extraction (reads from clipboard) ────────────────────────
@@ -49,7 +66,6 @@ async function pasteAndExtract() {
   try {
     transcription = await navigator.clipboard.readText();
   } catch {
-    // Clipboard API unavailable — fall back to a prompt
     transcription = window.prompt('Clipboard access was blocked.\nPaste your transcription here:') || '';
   }
 
@@ -60,19 +76,39 @@ async function pasteAndExtract() {
     return;
   }
 
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    showToast('No API key set. Click ⚙ to configure.', 'error');
+    btn.disabled = false;
+    btn.textContent = '📋 Paste & Extract with AI';
+    return;
+  }
+
   btn.textContent = 'Extracting…';
   try {
-    const res = await fetch('/api/extract', {
+    const response = await fetch(GEMINI_URL_BASE + apiKey, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcription }),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: GEMINI_PROMPT + transcription }] }],
+        generationConfig: { temperature: 0.2 }
+      })
     });
-    const body = await res.json();
-    if (!res.ok) { showToast(body.error || 'Extraction failed.', 'error'); return; }
-    populateForm(body.data);
+
+    if (!response.ok) {
+      const err = await response.json();
+      showToast(err.error?.message || 'Gemini API error.', 'error');
+      return;
+    }
+
+    const result = await response.json();
+    const raw = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const data = JSON.parse(cleaned);
+    populateForm(data);
     showToast('Meeting minutes populated!', 'success');
-  } catch {
-    showToast('Could not reach server. Is it running?', 'error');
+  } catch (err) {
+    showToast('Extraction failed: ' + (err.message || 'Unknown error'), 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = '📋 Paste & Extract with AI';
@@ -159,51 +195,70 @@ function removeLastRow() {
   if (tbody.rows.length > 1) tbody.deleteRow(tbody.rows.length - 1);
 }
 
-// ── Send via email ──────────────────────────────────────────────
-async function sendEmail() {
+// ── Copy for Outlook ────────────────────────────────────────────
+async function copyForOutlook() {
   const data = collectFormData();
   const btn  = document.getElementById('emailBtn');
   btn.disabled = true;
-  btn.textContent = 'Sending…';
+  btn.textContent = 'Copying…';
 
+  // Try to embed logo as base64
   let logoHtml = '';
   try {
-    const res = await fetch('/api/logo');
-    if (res.ok) {
-      const { dataUri } = await res.json();
+    const exts = ['png', 'jpg', 'jpeg', 'svg', 'gif'];
+    for (const ext of exts) {
+      const res = await fetch(`assets/logo/logo.${ext}`);
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      const dataUri = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
       logoHtml = `
         <tr>
           <td colspan="2" style="padding:8px 12px 4px;">
-            <img src="${dataUri}" height="52" style="height:52px;display:block;" alt="AlburyCity Council Logo">
+            <img src="${dataUri}" height="60" style="height:60px;display:block;" alt="AlburyCity Council">
           </td>
         </tr>`;
+      break;
     }
-  } catch { /* no logo, fine */ }
+  } catch { /* no logo */ }
 
-  const html    = buildEmailHTML(data, logoHtml);
-  const subject = `Meeting Minutes — ${data.meeting_topic || 'AlburyCity Council'} — ${data.date || ''}`.replace(/— $/, '').trim();
+  const html = buildEmailHTML(data, logoHtml);
 
   try {
-    const res  = await fetch('/api/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ html, subject }),
-    });
-    const body = await res.json();
-    if (!res.ok) {
-      showToast(body.error || 'Failed to send email.', 'error');
-    } else {
-      showToast('Email sent to indika.arasinghe@alburycity.nsw.gov.au', 'success');
-    }
+    await navigator.clipboard.write([
+      new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) }),
+    ]);
+    showToast('Copied! Paste into your Outlook email.', 'success');
   } catch {
-    showToast('Could not reach server. Is it running?', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '✉ Send to Office Email';
+    // Fallback: select + execCommand
+    const div = document.createElement('div');
+    div.contentEditable = 'true';
+    div.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+    div.innerHTML = html;
+    document.body.appendChild(div);
+    const range = document.createRange();
+    range.selectNodeContents(div);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    try {
+      document.execCommand('copy');
+      showToast('Copied! Paste into your Outlook email.', 'success');
+    } catch {
+      showToast('Auto-copy failed — please copy manually.', 'error');
+    }
+    sel.removeAllRanges();
+    document.body.removeChild(div);
   }
+
+  btn.disabled = false;
+  btn.textContent = '📋 Copy for Outlook';
 }
 
-// ── Build email-compatible HTML ─────────────────────────────────
+// ── Build Outlook-compatible HTML ───────────────────────────────
 function buildEmailHTML(data, logoHtml) {
   const BLUE   = '#28428D';
   const BORDER = '1px solid #CCCCCC';
@@ -226,7 +281,6 @@ function buildEmailHTML(data, logoHtml) {
        style="border-collapse:collapse;width:720px;max-width:720px;font-family:Calibri,Arial,sans-serif;">
   <tbody>
     ${logoHtml}
-    <!-- Title -->
     <tr>
       <td colspan="2" bgcolor="${BLUE}"
           style="background-color:${BLUE};color:#FFFFFF;text-align:center;
@@ -235,24 +289,10 @@ function buildEmailHTML(data, logoHtml) {
         Meeting Minutes
       </td>
     </tr>
-    <!-- Info rows -->
-    <tr>
-      <td style="${LABEL}">Meeting Topic:</td>
-      <td style="${CELL}">${esc(data.meeting_topic)}</td>
-    </tr>
-    <tr>
-      <td style="${LABEL}">Date:</td>
-      <td style="${CELL}">${esc(data.date)}</td>
-    </tr>
-    <tr>
-      <td style="${LABEL}">Host:</td>
-      <td style="${CELL}">${esc(data.host)}</td>
-    </tr>
-    <tr>
-      <td style="${LABEL}">Participants:</td>
-      <td style="${CELL}">${esc(data.participants)}</td>
-    </tr>
-    <!-- Body text -->
+    <tr><td style="${LABEL}">Meeting Topic:</td><td style="${CELL}">${esc(data.meeting_topic)}</td></tr>
+    <tr><td style="${LABEL}">Date:</td><td style="${CELL}">${esc(data.date)}</td></tr>
+    <tr><td style="${LABEL}">Host:</td><td style="${CELL}">${esc(data.host)}</td></tr>
+    <tr><td style="${LABEL}">Participants:</td><td style="${CELL}">${esc(data.participants)}</td></tr>
     <tr>
       <td colspan="2" style="${CELL}">
         <p style="margin:0 0 4px;"><strong>Preface:</strong></p>
@@ -262,35 +302,22 @@ function buildEmailHTML(data, logoHtml) {
         <p style="margin:0 0 4px;"><strong>Follow up points:</strong></p>
       </td>
     </tr>
-    <!-- Follow-up table -->
     <tr>
       <td colspan="2" style="padding:0;border:${BORDER};">
-        <table cellpadding="0" cellspacing="0" border="0"
-               style="border-collapse:collapse;width:100%;">
+        <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;">
           <thead>
             <tr>
-              <th bgcolor="${BLUE}"
-                  style="background-color:${BLUE};color:#FFFFFF;padding:8px 12px;
-                         text-align:center;font-family:Calibri,Arial,sans-serif;
-                         font-size:14px;font-weight:bold;width:34%;">Point</th>
-              <th bgcolor="${BLUE}"
-                  style="background-color:${BLUE};color:#FFFFFF;padding:8px 12px;
-                         text-align:center;font-family:Calibri,Arial,sans-serif;
-                         font-size:14px;font-weight:bold;width:33%;">Person</th>
-              <th bgcolor="${BLUE}"
-                  style="background-color:${BLUE};color:#FFFFFF;padding:8px 12px;
-                         text-align:center;font-family:Calibri,Arial,sans-serif;
-                         font-size:14px;font-weight:bold;width:33%;">Deadline</th>
+              <th bgcolor="${BLUE}" style="background-color:${BLUE};color:#FFFFFF;padding:8px 12px;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:14px;font-weight:bold;width:34%;">Point</th>
+              <th bgcolor="${BLUE}" style="background-color:${BLUE};color:#FFFFFF;padding:8px 12px;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:14px;font-weight:bold;width:33%;">Person</th>
+              <th bgcolor="${BLUE}" style="background-color:${BLUE};color:#FFFFFF;padding:8px 12px;text-align:center;font-family:Calibri,Arial,sans-serif;font-size:14px;font-weight:bold;width:33%;">Deadline</th>
             </tr>
           </thead>
           <tbody>${fuRows}</tbody>
         </table>
       </td>
     </tr>
-    <!-- Footer -->
     <tr>
-      <td colspan="2"
-          style="${CELL}text-align:center;font-style:italic;color:#555555;font-size:13px;">
+      <td colspan="2" style="${CELL}text-align:center;font-style:italic;color:#555555;font-size:13px;">
         ~~~Minutes prepared by Indika — AlburyCity Council~~~
       </td>
     </tr>
@@ -315,6 +342,28 @@ function clearAll() {
     document.getElementById(id).innerText = '';
   });
   resetFollowupRows(3);
+}
+
+// ── API Key settings ────────────────────────────────────────────
+function openSettings() {
+  document.getElementById('apiKeyInput').value = getApiKey();
+  document.getElementById('settingsModal').classList.remove('hidden');
+}
+function closeSettings(e) {
+  if (!e || e.target === document.getElementById('settingsModal')) {
+    document.getElementById('settingsModal').classList.add('hidden');
+  }
+}
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (key) {
+    localStorage.setItem('gemini_api_key', key);
+    showToast('API key saved!', 'success');
+  } else {
+    localStorage.removeItem('gemini_api_key');
+    showToast('API key cleared.', 'success');
+  }
+  document.getElementById('settingsModal').classList.add('hidden');
 }
 
 // ── Toast notifications ─────────────────────────────────────────
